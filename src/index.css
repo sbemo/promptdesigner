@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-ms-gray-100;
+}
+
+.prompt-card {
+  @apply bg-white shadow-sm rounded-lg transition-shadow hover:shadow-md;
+}
+
+.ms-button {
+  @apply px-4 py-2 bg-ms-blue text-white rounded hover:bg-opacity-90 transition-colors;
+}
+
+.ms-button-secondary {
+  @apply px-4 py-2 bg-white border border-ms-gray-400 rounded hover:bg-ms-gray-100 transition-colors;
+} 
