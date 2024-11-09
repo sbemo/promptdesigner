@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import PromptBlock from './PromptBlock';
 
+// 定义提示词区域的接口
 interface PromptSection {
-  id: string;
-  title: string;
-  content: string;
+  id: string;      // 区域ID
+  title: string;   // 区域标题
+  content: string; // 区域内容
 }
 
 interface Props {
@@ -12,20 +13,21 @@ interface Props {
 }
 
 const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
+  // 状态管理
   const [sections, setSections] = useState<PromptSection[]>([
-    { id: '1', title: 'untitled', content: '' }
+    { id: '1', title: 'Prompt title', content: '' }
   ]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // 组件挂载时自动设置第一个section为激活状态
+  // 组件挂载时自动激活第一个区域
   useEffect(() => {
     if (sections.length > 0) {
       const firstSection = sections[0];
       activateSection(firstSection);
     }
-  }, []); // 只在组件挂载时执行一次
+  }, []);
 
-  // 激活section的函数
+  // 激活指定区域
   const activateSection = (section: PromptSection) => {
     setActiveId(section.id);
     setActivePrompt({
@@ -34,6 +36,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     });
   };
 
+  // 创建内容更新处理函数
   const createUpdateHandler = (sectionId: string) => (keyword: string) => {
     setSections(prev => {
       const section = prev.find(s => s.id === sectionId);
@@ -42,6 +45,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
       const currentContent = section.content;
       let newContent: string;
 
+      // 处理内容拼接逻辑
       if (!currentContent.trim()) {
         newContent = `${keyword}, `;
       } else {
@@ -59,6 +63,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     });
   };
 
+  // 更新区域内容
   const updateContent = (id: string, newContent: string) => {
     setSections(prev =>
       prev.map(section =>
@@ -67,6 +72,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     );
   };
 
+  // 更新区域标题
   const updateTitle = (id: string, newTitle: string) => {
     setSections(prev =>
       prev.map(section =>
@@ -75,6 +81,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     );
   };
 
+  // 处理文本区域获得焦点
   const handleTextAreaFocus = (section: PromptSection) => {
     setActiveId(section.id);
     setActivePrompt({
@@ -83,11 +90,12 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     });
   };
 
+  // 处理文本区域内容变化
   const handleTextAreaChange = (id: string, value: string) => {
-    // 只更新内容，不重新激活 section
     updateContent(id, value);
   };
 
+  // 处理复制功能
   const handleCopy = (section: PromptSection) => {
     const textToCopy = `${section.title}\n${section.content}`;
     navigator.clipboard.writeText(textToCopy).then(() => {
@@ -95,6 +103,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     });
   };
 
+  // 处理清除功能
   const handleClear = (id: string) => {
     updateContent(id, '');
     const section = sections.find(s => s.id === id);
@@ -103,30 +112,35 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     }
   };
 
+  // 渲染UI
   return (
     <div className="flex-1 p-4 overflow-y-auto">
       {sections.map(section => (
-        <div key={section.id} className="mb-4 prompt-card p-4">
+        <div key={section.id} className="mb-4 prompt-card p-4 bg-white/90 backdrop-blur-sm shadow-sm hover:shadow-md transition-all">
+          {/* 标题输入框 */}
           <input
             type="text"
             value={section.title}
-            className="text-lg font-medium mb-2 px-2 w-full"
+            className="text-lg font-medium mb-2 px-2 w-full bg-transparent"
             onChange={(e) => updateTitle(section.id, e.target.value)}
           />
           <div className="flex gap-4">
+            {/* 提示词输入区域 */}
             <textarea
-              className={`w-1/2 p-2 border rounded min-h-[120px] ${
-                activeId === section.id ? 'border-ms-blue' : ''
+              className={`w-1/2 p-2 border rounded min-h-[120px] bg-white/95 backdrop-blur-sm ${
+                activeId === section.id ? 'border-ms-blue' : 'border-gray-200'
               }`}
               value={section.content}
               onChange={(e) => handleTextAreaChange(section.id, e.target.value)}
               onFocus={() => handleTextAreaFocus(section)}
               placeholder="在此输入提示词..."
             />
+            {/* 提示词块显示区域 */}
             <PromptBlock content={section.content} />
           </div>
+          {/* 操作按钮区域 */}
           <div className="mt-2 flex gap-2">
-            <select className="ms-button-secondary">
+            <select className="ms-button-secondary bg-white/95 backdrop-blur-sm">
               <option>Midjourney</option>
             </select>
             <button 
@@ -136,7 +150,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
               复制
             </button>
             <button 
-              className="ms-button-secondary"
+              className="ms-button-secondary bg-white/95 backdrop-blur-sm"
               onClick={() => handleClear(section.id)}
             >
               清除

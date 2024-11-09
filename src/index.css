@@ -1,19 +1,26 @@
+/* Tailwind 的基础样式 */
 @tailwind base;
+/* Tailwind 的组件样式 */
 @tailwind components;
+/* Tailwind 的工具类 */
 @tailwind utilities;
 
+/* 全局背景色设置 */
 body {
   @apply bg-ms-gray-100;
 }
 
+/* 提示词卡片样式 */
 .prompt-card {
   @apply bg-white shadow-sm rounded-lg transition-shadow hover:shadow-md;
 }
 
+/* 主要按钮样式 */
 .ms-button {
   @apply px-4 py-2 bg-ms-blue text-white rounded hover:bg-opacity-90 transition-colors;
 }
 
+/* 次要按钮样式 */
 .ms-button-secondary {
   @apply px-4 py-2 bg-white border border-ms-gray-400 rounded hover:bg-ms-gray-100 transition-colors;
 } 
