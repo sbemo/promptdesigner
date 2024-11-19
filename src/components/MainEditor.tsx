@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PromptBlock from './PromptBlock';
+import { MagicIcon } from './icons';
+import config from '../utils/config';
 
 // 定义提示词区域的接口
 interface PromptSection {
@@ -18,6 +20,8 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     { id: '1', title: 'Prompt title', content: '' }
   ]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [magicPromptResult, setMagicPromptResult] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   // 组件挂载时自动激活第一个区域
   useEffect(() => {
@@ -45,7 +49,6 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
       const currentContent = section.content;
       let newContent: string;
 
-      // 处理内容拼接逻辑
       if (!currentContent.trim()) {
         newContent = `${keyword}, `;
       } else {
@@ -64,19 +67,10 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
   };
 
   // 更新区域内容
-  const updateContent = (id: string, newContent: string) => {
+  const handleTextAreaChange = (id: string, value: string) => {
     setSections(prev =>
       prev.map(section =>
-        section.id === id ? { ...section, content: newContent } : section
-      )
-    );
-  };
-
-  // 更新区域标题
-  const updateTitle = (id: string, newTitle: string) => {
-    setSections(prev =>
-      prev.map(section =>
-        section.id === id ? { ...section, title: newTitle } : section
+        section.id === id ? { ...section, content: value } : section
       )
     );
   };
@@ -90,11 +84,6 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     });
   };
 
-  // 处理文本区域内容变化
-  const handleTextAreaChange = (id: string, value: string) => {
-    updateContent(id, value);
-  };
-
   // 处理复制功能
   const handleCopy = (section: PromptSection) => {
     const textToCopy = `${section.title}\n${section.content}`;
@@ -105,14 +94,88 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
 
   // 处理清除功能
   const handleClear = (id: string) => {
-    updateContent(id, '');
-    const section = sections.find(s => s.id === id);
-    if (section) {
-      activateSection(section);
+    setSections(prev =>
+      prev.map(section =>
+        section.id === id ? { ...section, content: '' } : section
+      )
+    );
+    setMagicPromptResult('');
+  };
+
+  // 处理 Magic Prompt 功能
+  const handleMagicPrompt = async (section: PromptSection) => {
+    if (!section.content.trim()) {
+      alert('请先输入提示词');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // 使用配置文件中的设置进行第一次调用
+      const parseResponse = await fetch(config.api.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': config.api.key,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: config.model.name,
+          messages: [
+            {
+              role: config.prompts.analyzer.role,
+              content: config.prompts.analyzer.content
+            },
+            {
+              role: 'user',
+              content: section.content
+            }
+          ],
+          temperature: config.model.settings.analyzer.temperature,
+          top_p: config.model.settings.analyzer.top_p
+        })
+      });
+      const parsedElements = await parseResponse.json();
+
+      // 使用配置文件中的设置进行第二次调用
+      const integrateResponse = await fetch(config.api.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': config.api.key,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: config.model.name,
+          messages: [
+            {
+              role: config.prompts.generator.role,
+              content: config.prompts.generator.content
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(parsedElements)
+            }
+          ],
+          temperature: config.model.settings.generator.temperature,
+          top_p: config.model.settings.generator.top_p,
+          max_tokens: config.model.settings.generator.max_tokens
+        })
+      });
+      const finalResult = await integrateResponse.json();
+      
+      try {
+        const jsonResult = JSON.parse(finalResult.choices[0].message.content);
+        setMagicPromptResult(jsonResult['magic-prompt'] || '');
+      } catch (e) {
+        setMagicPromptResult(finalResult.choices[0].message.content);
+      }
+    } catch (error) {
+      console.error('Magic prompt error:', error);
+      setMagicPromptResult('Error generating magic prompt. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // 渲染UI
   return (
     <div className="flex-1 p-4 overflow-y-auto">
       {sections.map(section => (
@@ -122,7 +185,7 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
             type="text"
             value={section.title}
             className="text-lg font-medium mb-2 px-2 w-full bg-transparent"
-            onChange={(e) => updateTitle(section.id, e.target.value)}
+            onChange={(e) => handleTextAreaChange(section.id, e.target.value)}
           />
           <div className="flex gap-4">
             {/* 提示词输入区域 */}
@@ -138,6 +201,22 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
             {/* 提示词块显示区域 */}
             <PromptBlock content={section.content} />
           </div>
+
+          {/* Magic Prompt 结果显示区域 */}
+          <div className="mt-4 relative">
+            <textarea
+              className="w-full p-2 border rounded min-h-[80px] bg-gray-50"
+              value={magicPromptResult}
+              readOnly
+              placeholder="Magic prompt will appear here..."
+            />
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/50">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              </div>
+            )}
+          </div>
+
           {/* 操作按钮区域 */}
           <div className="mt-2 flex gap-2">
             <select className="ms-button-secondary bg-white/95 backdrop-blur-sm">
@@ -154,6 +233,14 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
               onClick={() => handleClear(section.id)}
             >
               清除
+            </button>
+            <button
+              className={`ms-button flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => !isLoading && handleMagicPrompt(section)}
+              disabled={isLoading}
+            >
+              <MagicIcon className="w-4 h-4" />
+              {isLoading ? 'Generating...' : 'Magic Prompt'}
             </button>
           </div>
         </div>
