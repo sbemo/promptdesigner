@@ -20,7 +20,12 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
     { id: '1', title: 'Prompt title', content: '' }
   ]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [magicPromptResult, setMagicPromptResult] = useState('');
+  const [magicPromptResults, setMagicPromptResults] = useState({
+    first: '',
+    second: '',
+    third: '',
+    fourth: ''
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   // 组件挂载时自动激活第一个区域
@@ -99,7 +104,84 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
         section.id === id ? { ...section, content: '' } : section
       )
     );
-    setMagicPromptResult('');
+    setMagicPromptResults({
+      first: '',
+      second: '',
+      third: '',
+      fourth: ''
+    });
+  };
+
+  // 创建单个分析和生成过程的函数
+  const analyzeAndGenerate = async (content: string) => {
+    // 分析阶段
+    const analyzeResponse = await fetch(config.api.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': config.api.key,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: config.model.name,
+        messages: [
+          {
+            role: config.prompts.analyzer.role,
+            content: config.prompts.analyzer.content
+          },
+          {
+            role: 'user',
+            content: content
+          }
+        ],
+        temperature: config.model.settings.analyzer.temperature,
+        top_p: config.model.settings.analyzer.top_p
+      })
+    });
+    const analyzeResult = await analyzeResponse.json();
+    
+    // 解析分析结果中的 JSON
+    let analyzedContent;
+    try {
+      analyzedContent = JSON.parse(analyzeResult.choices[0].message.content);
+    } catch (e) {
+      console.error('Error parsing analyzer result:', e);
+      throw e;
+    }
+
+    // 生成阶段
+    const generateResponse = await fetch(config.api.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': config.api.key,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: config.model.name,
+        messages: [
+          {
+            role: config.prompts.generator.role,
+            content: config.prompts.generator.content
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(analyzedContent)
+          }
+        ],
+        temperature: config.model.settings.generator.temperature,
+        top_p: config.model.settings.generator.top_p,
+        max_tokens: config.model.settings.generator.max_tokens
+      })
+    });
+    const generateResult = await generateResponse.json();
+    
+    // 解析生成结果中的 JSON 并只返回 magic-prompt 的值
+    try {
+      const jsonResult = JSON.parse(generateResult.choices[0].message.content);
+      return jsonResult['magic-prompt'];
+    } catch (e) {
+      console.error('Error parsing generator result:', e);
+      return generateResult.choices[0].message.content;
+    }
   };
 
   // 处理 Magic Prompt 功能
@@ -111,66 +193,29 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
 
     setIsLoading(true);
     try {
-      // 使用配置文件中的设置进行第一次调用
-      const parseResponse = await fetch(config.api.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': config.api.key,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: config.model.name,
-          messages: [
-            {
-              role: config.prompts.analyzer.role,
-              content: config.prompts.analyzer.content
-            },
-            {
-              role: 'user',
-              content: section.content
-            }
-          ],
-          temperature: config.model.settings.analyzer.temperature,
-          top_p: config.model.settings.analyzer.top_p
-        })
-      });
-      const parsedElements = await parseResponse.json();
+      // 并行执行四次分析和生成过程
+      const results = await Promise.all([
+        analyzeAndGenerate(section.content),
+        analyzeAndGenerate(section.content),
+        analyzeAndGenerate(section.content),
+        analyzeAndGenerate(section.content)
+      ]);
 
-      // 使用配置文件中的设置进行第二次调用
-      const integrateResponse = await fetch(config.api.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': config.api.key,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: config.model.name,
-          messages: [
-            {
-              role: config.prompts.generator.role,
-              content: config.prompts.generator.content
-            },
-            {
-              role: 'user',
-              content: JSON.stringify(parsedElements)
-            }
-          ],
-          temperature: config.model.settings.generator.temperature,
-          top_p: config.model.settings.generator.top_p,
-          max_tokens: config.model.settings.generator.max_tokens
-        })
+      // 更新所有结果
+      setMagicPromptResults({
+        first: results[0],
+        second: results[1],
+        third: results[2],
+        fourth: results[3]
       });
-      const finalResult = await integrateResponse.json();
-      
-      try {
-        const jsonResult = JSON.parse(finalResult.choices[0].message.content);
-        setMagicPromptResult(jsonResult['magic-prompt'] || '');
-      } catch (e) {
-        setMagicPromptResult(finalResult.choices[0].message.content);
-      }
     } catch (error) {
       console.error('Magic prompt error:', error);
-      setMagicPromptResult('Error generating magic prompt. Please try again.');
+      setMagicPromptResults({
+        first: 'Error generating magic prompt',
+        second: 'Error generating magic prompt',
+        third: 'Error generating magic prompt',
+        fourth: 'Error generating magic prompt'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -203,19 +248,43 @@ const MainEditor: React.FC<Props> = ({ setActivePrompt }) => {
           </div>
 
           {/* Magic Prompt 结果显示区域 */}
-          <div className="mt-4 relative">
+          <div className="mt-4 space-y-4">
+            {/* 第一次结果 */}
             <textarea
               className="w-full p-2 border rounded min-h-[80px] bg-gray-50"
-              value={magicPromptResult}
+              value={magicPromptResults.first}
               readOnly
-              placeholder="Magic prompt will appear here..."
+              placeholder="First magic prompt result..."
             />
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/50">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              </div>
-            )}
+            {/* 第二次结果 */}
+            <textarea
+              className="w-full p-2 border rounded min-h-[80px] bg-gray-50"
+              value={magicPromptResults.second}
+              readOnly
+              placeholder="Second magic prompt result..."
+            />
+            {/* 第三次结果 */}
+            <textarea
+              className="w-full p-2 border rounded min-h-[80px] bg-gray-50"
+              value={magicPromptResults.third}
+              readOnly
+              placeholder="Third magic prompt result..."
+            />
+            {/* 第四次结果 */}
+            <textarea
+              className="w-full p-2 border rounded min-h-[80px] bg-gray-50"
+              value={magicPromptResults.fourth}
+              readOnly
+              placeholder="Fourth magic prompt result..."
+            />
           </div>
+
+          {/* Loading 状态显示 */}
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/50">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+          )}
 
           {/* 操作按钮区域 */}
           <div className="mt-2 flex gap-2">
